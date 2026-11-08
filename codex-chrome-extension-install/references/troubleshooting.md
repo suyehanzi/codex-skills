@@ -13,7 +13,7 @@ Verified on 2026-11-08 for `ChatGPT` version `1.26.1020.11845`, extension ID `he
 
 Use the computer/browser tool available in the current environment and respect the user's interaction constraints. A user who has prohibited Computer Use must authorize that method before UI-based reinstallation. Existing approval for the specific reinstall need not be requested again unless the action or access scope changes.
 
-The bundled script's download check accepts the legacy `Codex` manifest strings only. It does not validate the observed `ChatGPT` package. Its profile-directory check can also miss unpacked installations outside `Extensions/`.
+The bundled script's download check accepts the observed `Codex` and `ChatGPT` manifest name and description pairs. Its `--verify` command follows the registered path to read unpacked manifests outside `Extensions/` and returns a failing exit code for missing files or disabled extensions. An enabled local extension still requires a separate desktop connection check.
 
 ## Chrome Web Store still says unavailable
 

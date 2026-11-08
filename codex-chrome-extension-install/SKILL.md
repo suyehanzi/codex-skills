@@ -17,7 +17,7 @@ Official extension constants:
 - Observed legacy name and description: `Codex` / `Control Chrome with Codex.`
 - Observed name and description in version `1.26.1020.11845`: `ChatGPT` / `Control your browser with ChatGPT.`
 
-Display names vary by package version. Check the extension ID and package provenance alongside the name. The bundled script currently expects the legacy manifest name and description, so its download check rejects the observed ChatGPT package.
+Display names vary by package version. Check the extension ID and package provenance alongside the name. The bundled script accepts both observed name and description pairs when checking downloaded packages.
 
 ## Safety
 
@@ -31,7 +31,7 @@ Inspect the existing extension before changing it. An unpacked extension may be 
 
 For an existing unpacked installation with its verified source folder still available, follow the reinstall procedure in [Troubleshooting](references/troubleshooting.md#reinstall-an-existing-unpacked-extension). This route was verified on 2026-11-08 with version `1.26.1020.11845`.
 
-For the legacy external-update installation, use the workflow below. Read the script's compatibility limits before relying on its checks. Preserve a working source folder until replacement installation succeeds.
+For an external-update installation, use the workflow below. Preserve a working source folder until replacement installation succeeds.
 
 ## External-update workflow
 
@@ -67,10 +67,10 @@ Use `bash scripts/install_codex_chrome_extension.sh` for deterministic operation
 - `--install`: write Chrome's external extension JSON.
 - `--restart`: quit and reopen Google Chrome.
 - `--open-extensions`: open `chrome://extensions/`.
-- `--verify`: inspect the target profile registration and disable reasons. This is a local installation check, not a desktop connection test; an unpacked folder may be outside the profile extension directory.
+- `--verify` inspects the target profile registration, its manifest and disable reasons. Resolves absolute unpacked paths and relative packaged paths, and falls back to `Preferences` if the target entry is absent from `Secure Preferences`. Exit code 1 indicates missing or unreadable installation data; exit code 2 indicates a disabled extension.
 - `--yes`: skip the script's interactive install confirmation after the user has already confirmed in chat.
 
-The script has not been adapted to the ChatGPT package name. For that package, use the verified unpacked reinstall route and Chrome UI checks instead of treating script success as installation proof.
+The script checks local installation state. Verify desktop connectivity separately with an available browser integration. The download check inspects the CRX container and manifest; Chrome validates the package signature during installation.
 
 The script intentionally does not repair the native messaging host. If the native host manifest is missing or invalid, use Codex's Chrome plugin setup flow again from Plugins.
 

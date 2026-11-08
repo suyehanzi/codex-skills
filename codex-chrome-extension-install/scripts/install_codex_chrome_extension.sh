@@ -2,8 +2,7 @@
 set -euo pipefail
 
 EXTENSION_ID="${CODEX_CHROME_EXTENSION_ID:-hehggadaopoacecdllhhajmbjkdcmajg}"
-EXTENSION_NAME="Codex"
-EXTENSION_DESCRIPTION="Control Chrome with Codex."
+EXTENSION_NAME="Codex / ChatGPT"
 UPDATE_URL="https://clients2.google.com/service/update2/crx"
 HOST_NAME="com.openai.codexextension"
 PROFILE="${CODEX_CHROME_PROFILE:-Default}"
@@ -117,9 +116,9 @@ download_check() {
   mkdir -p "$workdir"
   log "Downloading official CRX metadata/package from Google update service..."
   curl -fL --max-time 60 -o "$crx" "$CRX_URL"
-  python3 - "$crx" "$EXTENSION_NAME" "$EXTENSION_DESCRIPTION" "$UPDATE_URL" <<'PY'
+  python3 - "$crx" "$UPDATE_URL" <<'PY'
 import io, json, sys, zipfile
-crx_path, expected_name, expected_description, expected_update_url = sys.argv[1:]
+crx_path, expected_update_url = sys.argv[1:]
 with open(crx_path, "rb") as f:
     data = f.read()
 if data[:4] != b"Cr24":
@@ -145,14 +144,16 @@ print(json.dumps({
     "permissions": manifest.get("permissions", []),
     "host_permissions": manifest.get("host_permissions", []),
 }, indent=2))
-if manifest.get("name") != expected_name:
-    raise SystemExit("Unexpected extension name")
-if manifest.get("description") != expected_description:
-    raise SystemExit("Unexpected extension description")
+supported_manifests = {
+    ("Codex", "Control Chrome with Codex."),
+    ("ChatGPT", "Control your browser with ChatGPT."),
+}
+if (manifest.get("name"), manifest.get("description")) not in supported_manifests:
+    raise SystemExit("Unexpected extension name or description")
 if manifest.get("update_url") != expected_update_url:
     raise SystemExit("Unexpected update_url")
 PY
-  log "CRX manifest matched the expected official Codex extension."
+  log "CRX manifest matched a supported Codex / ChatGPT extension."
 }
 
 confirm_install() {
@@ -194,7 +195,7 @@ verify_local_state() {
     log "Extension directory exists: $EXTENSION_DIR"
     find "$EXTENSION_DIR" -maxdepth 1 -mindepth 1 -type d -print | sed 's/^/  version: /'
   else
-    warn "Extension directory does not exist yet: $EXTENSION_DIR"
+    log "No packaged extension directory; checking registration for an unpacked install."
   fi
 
   local prefs=""
@@ -205,33 +206,57 @@ verify_local_state() {
   fi
 
   if [ -n "$prefs" ] && command -v python3 >/dev/null 2>&1; then
-    python3 - "$prefs" "$EXTENSION_ID" <<'PY'
+    python3 - "$CHROME_SUPPORT/$PROFILE" "$EXTENSION_ID" <<'PY'
 import json, sys
-prefs_path, extension_id = sys.argv[1:]
-with open(prefs_path, "r", encoding="utf-8") as f:
-    prefs = json.load(f)
-settings = prefs.get("extensions", {}).get("settings", {})
-entry = settings.get(extension_id)
+from pathlib import Path
+profile_path, extension_id = sys.argv[1:]
+profile_path = Path(profile_path)
+entry = None
+for filename in ("Secure Preferences", "Preferences"):
+    prefs_path = profile_path / filename
+    if prefs_path.is_file():
+        with prefs_path.open(encoding="utf-8") as f:
+            prefs = json.load(f)
+        entry = prefs.get("extensions", {}).get("settings", {}).get(extension_id)
+        if entry:
+            break
 if not entry:
     print("registered: false")
     sys.exit(1)
 disable_reasons = entry.get("disable_reasons") or entry.get("disableReasons") or []
 manifest = entry.get("manifest", {})
+manifest_path = None
+if entry.get("path"):
+    extension_path = Path(entry["path"])
+    if not extension_path.is_absolute():
+        extension_path = profile_path / "Extensions" / extension_path
+    manifest_path = extension_path / "manifest.json"
+    if not manifest_path.is_file():
+        print(f"Registered extension manifest is missing: {manifest_path}")
+        sys.exit(1)
+    with manifest_path.open(encoding="utf-8") as f:
+        manifest = json.load(f)
+if not manifest.get("name") or not manifest.get("version"):
+    print("Registered extension manifest is incomplete")
+    sys.exit(1)
+enabled = not bool(disable_reasons) and entry.get("state") != 0
 print(json.dumps({
     "registered": True,
     "name": manifest.get("name"),
     "version": manifest.get("version"),
     "location": entry.get("location"),
     "path": entry.get("path"),
+    "manifest_path": str(manifest_path) if manifest_path else None,
     "from_webstore": entry.get("from_webstore"),
-    "enabled": not bool(disable_reasons),
+    "enabled": enabled,
     "disable_reasons": disable_reasons,
 }, indent=2))
-if disable_reasons:
+if not enabled:
     sys.exit(2)
 PY
   else
     warn "Could not inspect Chrome preferences for enabled state."
+    return 1
   fi
 }
 
@@ -242,7 +267,7 @@ run_codex_plugin_checks_if_available() {
   fi
 
   local scripts_root
-  scripts_root="$(find "$HOME/.codex/plugins/cache/openai-bundled/chrome" -path '*/scripts/check-extension-installed.js' -print 2>/dev/null | sort | tail -n 1 | sed 's#/check-extension-installed.js$##')"
+  scripts_root="$(find "$HOME/.codex/plugins/cache/openai-bundled/chrome" -path '*/scripts/check-extension-installed.js' -print 2>/dev/null | sort | tail -n 1 | sed 's#/check-extension-installed.js$##' || true)"
   if [ -z "$scripts_root" ]; then
     warn "Codex Chrome plugin helper scripts not found; skipping helper checks."
     return
@@ -275,9 +300,11 @@ if [ "$DO_OPEN_EXTENSIONS" = "1" ]; then
   open_extensions
 fi
 
+verify_status=0
 if [ "$DO_VERIFY" = "1" ]; then
-  verify_local_state || true
+  verify_local_state || verify_status=$?
   run_codex_plugin_checks_if_available
 fi
 
 log "Done."
+exit "$verify_status"
