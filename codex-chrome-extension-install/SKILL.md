@@ -1,6 +1,6 @@
 ---
 name: codex-chrome-extension-install
-description: Install, repair, or verify the official Codex Chrome Extension on macOS when Chrome Web Store shows "This item is not available", the Codex Chrome plugin cannot communicate with Chrome, or the user needs to repeat the manual external-extension install on another Mac. Uses the official extension ID, Google's update URL, Chrome external extension configuration, Chrome restart, enable prompt handling, and connection verification.
+description: Install, repair, or verify the Codex / ChatGPT Chrome extension on macOS when store installation fails, an existing unpacked extension needs reinstalling, or the desktop application cannot connect to Chrome.
 ---
 
 # Codex Chrome Extension Install
@@ -14,8 +14,10 @@ Official extension constants:
 - Extension ID: `hehggadaopoacecdllhhajmbjkdcmajg`
 - Native host: `com.openai.codexextension`
 - Update URL: `https://clients2.google.com/service/update2/crx`
-- Expected extension name: `Codex`
-- Expected description: `Control Chrome with Codex.`
+- Observed legacy name and description: `Codex` / `Control Chrome with Codex.`
+- Observed name and description in version `1.26.1020.11845`: `ChatGPT` / `Control your browser with ChatGPT.`
+
+Display names vary by package version. Check the extension ID and package provenance alongside the name. The bundled script currently expects the legacy manifest name and description, so its download check rejects the observed ChatGPT package.
 
 ## Safety
 
@@ -23,10 +25,18 @@ Installing this extension gives Chrome high-risk permissions: read and change da
 
 Before running an install or clicking Chrome's "Enable extension" prompt, get explicit user confirmation that they want to install the official Codex Chrome Extension. Do not install similarly named Chrome Web Store results such as "Codex Chrome Bridge" unless the user separately asks for that third-party extension.
 
-## Workflow
+## Choose the installation route
+
+Inspect the existing extension before changing it. An unpacked extension may be registered in the profile's `Secure Preferences` with a path outside the profile's `Extensions` directory. Its absence from that directory does not establish that it is uninstalled. Read only the target extension entry when inspecting preferences.
+
+For an existing unpacked installation with its verified source folder still available, follow the reinstall procedure in [Troubleshooting](references/troubleshooting.md#reinstall-an-existing-unpacked-extension). This route was verified on 2026-11-08 with version `1.26.1020.11845`.
+
+For the legacy external-update installation, use the workflow below. Read the script's compatibility limits before relying on its checks. Preserve a working source folder until replacement installation succeeds.
+
+## External-update workflow
 
 1. Confirm the machine is macOS with Google Chrome installed.
-2. Ask the user to enable their proxy/TUN if Chrome Web Store is unreachable.
+2. If the store is unreachable, check the reported network failure before proposing a proxy or TUN change.
 3. Run a read-only check:
 
    ```bash
@@ -39,7 +49,7 @@ Before running an install or clicking Chrome's "Enable extension" prompt, get ex
    bash scripts/install_codex_chrome_extension.sh --install --download-check --restart --open-extensions --yes
    ```
 
-5. In Chrome, handle only the official `Codex` prompt/card. Click "Enable extension" or toggle the extension on if Chrome leaves it disabled after external installation.
+5. In Chrome, handle only the verified extension prompt/card for the target ID. Click "Enable extension" or toggle the extension on if Chrome leaves it disabled after external installation.
 6. Verify the local Chrome state:
 
    ```bash
@@ -57,8 +67,10 @@ Use `bash scripts/install_codex_chrome_extension.sh` for deterministic operation
 - `--install`: write Chrome's external extension JSON.
 - `--restart`: quit and reopen Google Chrome.
 - `--open-extensions`: open `chrome://extensions/`.
-- `--verify`: report whether Chrome has installed and enabled the extension.
+- `--verify`: inspect the target profile registration and disable reasons. This is a local installation check, not a desktop connection test; an unpacked folder may be outside the profile extension directory.
 - `--yes`: skip the script's interactive install confirmation after the user has already confirmed in chat.
+
+The script has not been adapted to the ChatGPT package name. For that package, use the verified unpacked reinstall route and Chrome UI checks instead of treating script success as installation proof.
 
 The script intentionally does not repair the native messaging host. If the native host manifest is missing or invalid, use Codex's Chrome plugin setup flow again from Plugins.
 
